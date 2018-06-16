@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crawler/crawler"
+	"WebCrawler/crawler"
 	"flag"
 	"sync"
 )
