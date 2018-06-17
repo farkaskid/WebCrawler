@@ -4,6 +4,8 @@ A simple web crawler. This leverages Go's lightweight goroutines to achieve high
 
 `crawl -url http://www.google.com`
 
+![](demo.gif)
+
 and enjoy.
 
 OSX binary is available in the release.
