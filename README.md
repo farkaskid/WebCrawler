@@ -4,7 +4,7 @@ A simple web crawler. This leverages Go's lightweight goroutines to achieve high
 
 `crawl -url http://www.google.com`
 
-![](https://drive.google.com/open?id=1IIrCu8fDyMeRuABqVhQP2JxGMPSJWBIt)
+![](demo.gif)
 
 and enjoy.
 

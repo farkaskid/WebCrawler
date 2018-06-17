@@ -12,7 +12,7 @@ func main() {
 
 	flag.Parse()
 
-	channel := make(chan bool)
+	channel := make(chan bool, 1)
 
 	crawler := crawler.Crawler{
 		Processor: crawler.LogProcessor{},
@@ -21,6 +21,7 @@ func main() {
 		Done:      channel,
 	}
 
+	crawler.Done <- false
 	go crawler.Start()
 
 	for activeCrawlers := 1; activeCrawlers >= 1; {
