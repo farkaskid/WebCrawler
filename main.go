@@ -3,6 +3,7 @@ package main
 import (
 	"WebCrawler/crawler"
 	"flag"
+	"log"
 	"sync"
 )
 
@@ -22,9 +23,20 @@ func main() {
 
 	go crawler.Start()
 
-	for {
+	for activeCrawlers := 1; activeCrawlers >= 1; {
 		select {
-		case <-channel:
+		case status := <-channel:
+			if !status {
+				activeCrawlers++
+			} else {
+				activeCrawlers--
+
+				if activeCrawlers == 1 {
+					activeCrawlers--
+				}
+			}
 		}
 	}
+
+	log.Println("Crawler finished")
 }

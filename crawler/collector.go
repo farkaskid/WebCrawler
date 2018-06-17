@@ -75,7 +75,9 @@ func (collector URLCollector) Collect(url string) []string {
 		urls = append(urls, childURL)
 	}
 
-	log.Println(len(urls), "URLs found on the URL", url)
+	if len(urls) >= 0 {
+		log.Println(len(urls), "URLs found on the URL", url)
+	}
 
 	return urls
 }
