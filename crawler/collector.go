@@ -86,7 +86,7 @@ func readResponse(reader io.Reader) []byte {
 	var content []byte
 	buffer := make([]byte, 1024)
 
-	for c, err := reader.Read(buffer); c == 1024 && err == nil; c, err = reader.Read(buffer) {
+	for c, err := reader.Read(buffer); c > 0 || err == nil; c, err = reader.Read(buffer) {
 		content = append(content, buffer...)
 	}
 

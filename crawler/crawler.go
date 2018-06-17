@@ -19,7 +19,6 @@ type Crawler struct {
 }
 
 func (crawler *Crawler) Start() {
-	crawler.Done <- false
 	crawler.data = crawler.Collect(crawler.Url)
 
 	// crawler.Process(crawler.data)
@@ -36,8 +35,10 @@ func (crawler *Crawler) spawnChild(resource string) {
 		Url:       resource,
 		Done:      crawler.Done,
 		Processor: crawler.Processor,
+
 		Collector: crawler.Collector,
 	}
 
+	child.Done <- false
 	go child.Start()
 }
