@@ -9,6 +9,7 @@ import (
 
 func main() {
 	url := flag.String("url", "", "url to start")
+	boundedBy := flag.String("bound", "", "Domain to bound the crawler")
 
 	flag.Parse()
 
@@ -17,6 +18,7 @@ func main() {
 	crawler := crawler.Crawler{
 		Processor: crawler.LogProcessor{},
 		Collector: crawler.URLCollector{make(map[string]bool), make(map[string]bool), &sync.Mutex{}},
+		Filter:    crawler.CrossDomainFilter{*boundedBy},
 		Url:       *url,
 		Done:      channel,
 	}

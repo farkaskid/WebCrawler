@@ -8,6 +8,10 @@ type Processor interface {
 	Process(data []string)
 }
 
+type Filter interface {
+	Filter(urls []string) []string
+}
+
 type Crawler struct {
 	Url  string
 	Done chan<- bool
@@ -16,6 +20,7 @@ type Crawler struct {
 
 	Collector
 	Processor
+	Filter
 }
 
 func (crawler *Crawler) Start() {
@@ -23,7 +28,7 @@ func (crawler *Crawler) Start() {
 
 	// crawler.Process(crawler.data)
 
-	for _, datum := range crawler.data {
+	for _, datum := range crawler.Filter.Filter(crawler.data) {
 		crawler.spawnChild(datum)
 	}
 
@@ -35,7 +40,7 @@ func (crawler *Crawler) spawnChild(resource string) {
 		Url:       resource,
 		Done:      crawler.Done,
 		Processor: crawler.Processor,
-
+		Filter:    crawler.Filter,
 		Collector: crawler.Collector,
 	}
 
