@@ -13,12 +13,20 @@ func main() {
 
 	flag.Parse()
 
+	var filter crawler.Filter
+
+	if *boundedBy == "" {
+		filter = crawler.NoneFilter{}
+	} else {
+		filter = crawler.CrossDomainFilter{*boundedBy}
+	}
+
 	channel := make(chan bool, 1)
 
 	crawler := crawler.Crawler{
 		Processor: crawler.LogProcessor{},
 		Collector: crawler.URLCollector{make(map[string]bool), make(map[string]bool), &sync.Mutex{}},
-		Filter:    crawler.CrossDomainFilter{*boundedBy},
+		Filter:    filter,
 		Url:       *url,
 		Done:      channel,
 	}

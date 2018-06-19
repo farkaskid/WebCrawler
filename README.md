@@ -7,3 +7,8 @@ A simple web crawler. This leverages Go's lightweight goroutines to achieve high
 and enjoy.
 
 OSX binary is available in the release.
+
+## More Options
+
+- `-bound` flag can be used to bound the crawler within a given domain.
+`crawl -url http://www.netflix.com -bound netflix.com`
