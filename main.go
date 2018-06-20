@@ -4,21 +4,31 @@ import (
 	"WebCrawler/crawler"
 	"flag"
 	"log"
+	"net/url"
 	"sync"
 )
 
 func main() {
-	url := flag.String("url", "", "url to start")
-	boundedBy := flag.String("bound", "", "Domain to bound the crawler")
+	rawurl := flag.String("url", "", "url to start")
+	bound := flag.Bool("bound", false, "Domain to bound the crawler")
 
 	flag.Parse()
 
 	var filter crawler.Filter
 
-	if *boundedBy == "" {
-		filter = crawler.NoneFilter{}
+	url, err := url.Parse(*rawurl)
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	log.Println(*bound)
+
+	if *bound {
+		log.Println(url.Hostname())
+		filter = crawler.CrossDomainFilter{url.Hostname()}
 	} else {
-		filter = crawler.CrossDomainFilter{*boundedBy}
+		filter = crawler.NoneFilter{}
 	}
 
 	channel := make(chan bool, 1)
@@ -27,7 +37,7 @@ func main() {
 		Processor: crawler.LogProcessor{},
 		Collector: crawler.URLCollector{make(map[string]bool), make(map[string]bool), &sync.Mutex{}},
 		Filter:    filter,
-		Url:       *url,
+		Url:       *rawurl,
 		Done:      channel,
 	}
 

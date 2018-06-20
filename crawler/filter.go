@@ -1,7 +1,7 @@
 package crawler
 
 import (
-	"strings"
+	"net/url"
 )
 
 type NoneFilter struct{}
@@ -17,9 +17,15 @@ type CrossDomainFilter struct {
 func (filter CrossDomainFilter) Filter(urls []string) []string {
 	var filteredURLs []string
 
-	for _, url := range urls {
-		if strings.Contains(url, filter.Domain) {
-			filteredURLs = append(filteredURLs, url)
+	for _, rawurl := range urls {
+		url, err := url.Parse(rawurl)
+
+		if err != nil {
+			continue
+		}
+
+		if url.Hostname() == filter.Domain {
+			filteredURLs = append(filteredURLs, rawurl)
 		}
 	}
 

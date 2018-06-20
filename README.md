@@ -10,5 +10,5 @@ OSX binary is available in the release.
 
 ## More Options
 
-- `-bound` flag can be used to bound the crawler within a given domain.
-`crawl -url http://www.netflix.com -bound netflix.com`
+- `-bound` flag can be used to bound the crawler within the domain of the given URL.
+`crawl -url http://www.netflix.com -bound`
