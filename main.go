@@ -11,12 +11,14 @@ import (
 func main() {
 	rawurl := flag.String("url", "", "url to start")
 	bound := flag.Bool("bound", false, "Domain to bound the crawler")
+	host := flag.String("host", "", "Domain to bound the crawler")
 
 	flag.Parse()
 
 	var filter crawler.Filter
 
 	url, err := url.Parse(*rawurl)
+	hostName := url.Hostname()
 
 	if err != nil {
 		log.Fatalln(err)
@@ -25,8 +27,13 @@ func main() {
 	log.Println(*bound)
 
 	if *bound {
-		log.Println(url.Hostname())
-		filter = crawler.CrossDomainFilter{url.Hostname()}
+		if *host != "" {
+			hostName = *host
+		}
+
+		log.Println(hostName)
+
+		filter = crawler.CrossDomainFilter{hostName}
 	} else {
 		filter = crawler.NoneFilter{}
 	}
