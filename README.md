@@ -8,4 +8,9 @@ A simple web crawler. This leverages Go's lightweight goroutines to achieve high
 
 and enjoy.
 
-OSX binary is available in the release.
+OSX binary is available in the release. You can download it and run with the usual `./crawlerOSX` syntax.
+
+## More Options
+
+- `-bound` flag can be used to bound the crawler within the domain of the given URL.
+`crawl -url http://www.netflix.com -bound`
