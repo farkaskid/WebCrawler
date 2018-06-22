@@ -2,6 +2,7 @@ package main
 
 import (
 	"WebCrawler/crawler"
+	"WebCrawler/executor"
 	"flag"
 	"log"
 	"net/url"
@@ -22,8 +23,6 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	log.Println(*bound)
-
 	if *bound {
 		log.Println(url.Hostname())
 		filter = crawler.CrossDomainFilter{url.Hostname()}
@@ -31,30 +30,27 @@ func main() {
 		filter = crawler.NoneFilter{}
 	}
 
-	channel := make(chan bool, 1)
+	ctlCh := make(chan int)
 
-	crawler := crawler.Crawler{
+	exec := executor.NewExecutor(10, ctlCh)
+	reports := exec.Reports
+	jobs := exec.Jobs
+
+	c := crawler.Crawler{
 		Processor: crawler.LogProcessor{},
 		Collector: crawler.URLCollector{make(map[string]bool), make(map[string]bool), &sync.Mutex{}},
 		Filter:    filter,
 		Url:       *rawurl,
-		Done:      channel,
+		Executor:  exec,
 	}
 
-	crawler.Done <- false
-	go crawler.Start()
+	exec.Add(crawler.CrawlerJob{c})
 
-	for activeCrawlers := 1; activeCrawlers >= 1; {
+	for {
 		select {
-		case status := <-channel:
-			if !status {
-				activeCrawlers++
-			} else {
-				activeCrawlers--
-
-				if activeCrawlers == 1 {
-					activeCrawlers--
-				}
+		case <-reports:
+			if len(jobs) == 0 && len(reports) != 0 && exec.ActiveWorkers == 0 {
+				break
 			}
 		}
 	}
