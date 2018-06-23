@@ -10,8 +10,9 @@ import (
 )
 
 func main() {
-	rawurl := flag.String("url", "", "url to start")
-	bound := flag.Bool("bound", false, "Domain to bound the crawler")
+	rawurl := flag.String("url", "", "url to start.")
+	bound := flag.Bool("bound", false, "Domain to bound the crawler.")
+	maxWorkers := flag.Int("maxWorkers", 1000, "Number of concurrent crawler tasks.")
 
 	flag.Parse()
 
@@ -24,7 +25,6 @@ func main() {
 	}
 
 	if *bound {
-		log.Println(url.Hostname())
 		filter = &crawler.CrossDomainFilter{url.Hostname()}
 	} else {
 		filter = &crawler.NoneFilter{}
@@ -32,24 +32,28 @@ func main() {
 
 	ctlCh := make(chan int)
 
-	exec := executor.NewExecutor(100000, ctlCh)
+	exec := executor.NewExecutor(*maxWorkers, ctlCh)
 	reports := exec.Reports
 	jobs := exec.Jobs
 
 	c := newCrawler(*rawurl, filter, &exec)
 
-	exec.Add(crawler.CrawlerJob{c})
+	exec.AddJob(crawler.CrawlerJob{c})
+
+	defer log.Println("Crawler finished")
 
 	for {
 		select {
 		case <-reports:
-			if len(jobs) == 0 && len(reports) != 0 && exec.ActiveWorkers == 0 {
-				break
+			if len(jobs) == 0 && len(reports) == 0 && exec.ActiveWorkers == 0 {
+				log.Println("Sending termination request...")
+				ctlCh <- 1
+				if 0 == <-ctlCh {
+					return
+				}
 			}
 		}
 	}
-
-	log.Println("Crawler finished")
 }
 
 func newCrawler(url string, filter crawler.Filter, executor *executor.Executor) crawler.Crawler {

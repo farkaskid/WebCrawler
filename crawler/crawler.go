@@ -10,7 +10,7 @@ type Crawler struct {
 	Collector
 	Processor
 	Filter
-	*executor.Executor
+	Executor *executor.Executor
 }
 
 func (crawler *Crawler) spawnChild(resource string) {
@@ -22,7 +22,7 @@ func (crawler *Crawler) spawnChild(resource string) {
 		Executor:  crawler.Executor,
 	}
 
-	crawler.Executor.Add(CrawlerJob{child})
+	crawler.Executor.AddJob(CrawlerJob{child})
 }
 
 type CrawlerJob struct {
@@ -42,13 +42,22 @@ func (job CrawlerJob) Execute() executor.Report {
 		count++
 	}
 
-	return CrawlerReport{count}
+	return CrawlerReport{c.Url, count}
+}
+
+func (job CrawlerJob) String() string {
+	return "Crawl url: " + job.Crawler.Url
 }
 
 type CrawlerReport struct {
-	urlCount int
+	Url      string
+	UrlCount int
 }
 
 func (report CrawlerReport) Status() int {
 	return 0
+}
+
+func (report CrawlerReport) String() string {
+	return "Crawl report for url: " + report.Url
 }

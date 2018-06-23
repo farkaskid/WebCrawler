@@ -64,6 +64,10 @@ func (collector URLCollector) Collect(rawurl string) []string {
 		return rawurls
 	}
 
+	if 200 > res.StatusCode || res.StatusCode >= 300 {
+		return rawurls
+	}
+
 	redirectedUrl := res.Request.URL.String()
 
 	if err == nil {
