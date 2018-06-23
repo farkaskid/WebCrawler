@@ -30,13 +30,13 @@ func main() {
 		filter = &crawler.NoneFilter{}
 	}
 
-	ctlCh := make(chan int)
+	signals := make(chan int)
 
-	exec := executor.NewExecutor(*maxWorkers, ctlCh)
+	exec := executor.NewExecutor(*maxWorkers, signals)
 	reports := exec.Reports
 	jobs := exec.Jobs
 
-	c := newCrawler(*rawurl, filter, &exec)
+	c := newCrawler(*rawurl, filter, exec)
 
 	exec.AddJob(crawler.CrawlerJob{c})
 
@@ -47,8 +47,8 @@ func main() {
 		case <-reports:
 			if len(jobs) == 0 && len(reports) == 0 && exec.ActiveWorkers == 0 {
 				log.Println("Sending termination request...")
-				ctlCh <- 1
-				if 0 == <-ctlCh {
+				signals <- 1
+				if 0 == <-signals {
 					return
 				}
 			}

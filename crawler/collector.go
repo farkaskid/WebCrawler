@@ -70,10 +70,8 @@ func (collector URLCollector) Collect(rawurl string) []string {
 
 	redirectedUrl := res.Request.URL.String()
 
-	if err == nil {
-		if collector.Visited(existingUrls, redirectedUrl) {
-			return rawurls
-		}
+	if collector.Visited(existingUrls, redirectedUrl) {
+		return rawurls
 	}
 
 	collector.Add(existingUrls, redirectedUrl, true)
@@ -83,9 +81,9 @@ func (collector URLCollector) Collect(rawurl string) []string {
 
 	content := readResponse(res.Body)
 
-	urlFinder := urlFinderGenerator(string(content))
+	urlGen := urlGenerator(string(content))
 
-	for childRawUrl := urlFinder(); childRawUrl != ""; childRawUrl = urlFinder() {
+	for childRawUrl := urlGen(); childRawUrl != ""; childRawUrl = urlGen() {
 		if len(childRawUrl) < 5 {
 			continue
 		}
@@ -129,26 +127,25 @@ func readResponse(reader io.Reader) []byte {
 	return content
 }
 
-func urlFinderGenerator(content string) func() string {
-	modifiedContent := content
+func urlGenerator(allContent string) func() string {
+	content := allContent
 
 	return func() string {
-		start := strings.Index(modifiedContent, "href=\"")
+		start := strings.Index(content, "href=\"")
 
 		if start == -1 {
 			return ""
 		}
 
-		modifiedContent = modifiedContent[start+6:]
-		end := strings.Index(modifiedContent, "\"")
+		content = content[start+6:]
+		end := strings.Index(content, "\"")
 
 		if end == -1 {
 			return ""
 		}
 
-		url := modifiedContent[:end]
-
-		modifiedContent = modifiedContent[end:]
+		url := content[:end]
+		content = content[end:]
 
 		return url
 	}
