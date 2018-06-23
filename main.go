@@ -25,24 +25,18 @@ func main() {
 
 	if *bound {
 		log.Println(url.Hostname())
-		filter = crawler.CrossDomainFilter{url.Hostname()}
+		filter = &crawler.CrossDomainFilter{url.Hostname()}
 	} else {
-		filter = crawler.NoneFilter{}
+		filter = &crawler.NoneFilter{}
 	}
 
 	ctlCh := make(chan int)
 
-	exec := executor.NewExecutor(10, ctlCh)
+	exec := executor.NewExecutor(100000, ctlCh)
 	reports := exec.Reports
 	jobs := exec.Jobs
 
-	c := crawler.Crawler{
-		Processor: crawler.LogProcessor{},
-		Collector: crawler.URLCollector{make(map[string]bool), make(map[string]bool), &sync.Mutex{}},
-		Filter:    filter,
-		Url:       *rawurl,
-		Executor:  exec,
-	}
+	c := newCrawler(*rawurl, filter, &exec)
 
 	exec.Add(crawler.CrawlerJob{c})
 
@@ -56,4 +50,17 @@ func main() {
 	}
 
 	log.Println("Crawler finished")
+}
+
+func newCrawler(url string, filter crawler.Filter, executor *executor.Executor) crawler.Crawler {
+	processor := &crawler.LogProcessor{}
+	collector := &crawler.URLCollector{make(map[string]bool), &sync.Mutex{}}
+
+	return crawler.Crawler{
+		Processor: processor,
+		Collector: collector,
+		Filter:    filter,
+		Url:       url,
+		Executor:  executor,
+	}
 }

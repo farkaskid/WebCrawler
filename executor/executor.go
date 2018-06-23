@@ -1,9 +1,5 @@
 package executor
 
-import (
-	"sync"
-)
-
 type Executor struct {
 	maxWorkers    int
 	ActiveWorkers int
@@ -11,8 +7,6 @@ type Executor struct {
 	Jobs    chan Job
 	Reports chan Report
 	ctl     <-chan int
-
-	mutex *sync.Mutex
 }
 
 func NewExecutor(maxWorkers int, ctl <-chan int) Executor {
@@ -21,7 +15,6 @@ func NewExecutor(maxWorkers int, ctl <-chan int) Executor {
 		Jobs:       make(chan Job, maxWorkers),
 		Reports:    make(chan Report, maxWorkers),
 		ctl:        ctl,
-		mutex:      &sync.Mutex{},
 	}
 
 	e.init()

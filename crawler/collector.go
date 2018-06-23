@@ -4,82 +4,114 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"sync"
 )
 
 type URLCollector struct {
-	ResourceMap map[string]bool
-	UrlMap      map[string]bool
-	Mutex       *sync.Mutex
+	UrlMap map[string]bool
+	*sync.Mutex
 }
 
-func (collector URLCollector) Collect(url string) []string {
-	var urls []string
+func (collector URLCollector) sync(f func()) {
+	collector.Lock()
+	f()
+	collector.Unlock()
+}
 
-	collector.Mutex.Lock()
-	if collector.UrlMap[url] {
-		collector.Mutex.Unlock()
-		return urls
-	}
-	collector.Mutex.Unlock()
+func (collector URLCollector) Visited(m map[string]bool, s string) (visited bool) {
+	collector.sync(func() { visited = m[s] })
+	return
+}
 
-	res, err := http.Get(url)
+func (collector URLCollector) Present(m map[string]bool, s string) (present bool) {
+	collector.sync(func() { _, present = m[s] })
+	return
+}
+
+func (collector URLCollector) Add(m map[string]bool, s string, visited bool) {
+	collector.sync(func() { m[s] = visited })
+}
+
+func convertToAbs(parentUrl *url.URL, childUrl *url.URL) string {
+	parentUrl.Path = path.Join(parentUrl.Path, childUrl.Path)
+
+	return parentUrl.String()
+}
+
+func (collector URLCollector) Collect(rawurl string) []string {
+	var rawurls []string
+
+	_, err := url.Parse(rawurl)
 
 	if err != nil {
-		log.Println("Failed to crawl URL", url)
-
-		return urls
+		return rawurls
 	}
+
+	existingUrls := collector.UrlMap
+
+	if collector.Visited(existingUrls, rawurl) {
+		return rawurls
+	}
+
+	res, err := http.Get(rawurl)
+
+	if err != nil {
+		log.Println("Failed to crawl URL", rawurl)
+
+		return rawurls
+	}
+
+	redirectedUrl := res.Request.URL.String()
+
+	if err == nil {
+		if collector.Visited(existingUrls, redirectedUrl) {
+			return rawurls
+		}
+	}
+
+	collector.Add(existingUrls, redirectedUrl, true)
+	collector.Add(existingUrls, rawurl, true)
 
 	defer res.Body.Close()
 
 	content := readResponse(res.Body)
 
-	collector.Mutex.Lock()
-	collector.UrlMap[url] = true
-	collector.Mutex.Unlock()
-
 	urlFinder := urlFinderGenerator(string(content))
 
-	for childURL := urlFinder(); childURL != ""; childURL = urlFinder() {
-		if len(childURL) < 5 {
+	for childRawUrl := urlFinder(); childRawUrl != ""; childRawUrl = urlFinder() {
+		if len(childRawUrl) < 5 {
 			continue
 		}
 
-		collector.Mutex.Lock()
-		if _, contains := collector.ResourceMap[childURL]; contains {
-			collector.Mutex.Unlock()
+		childurl, err := url.Parse(childRawUrl)
+
+		if err != nil {
 			continue
 		}
-		collector.Mutex.Unlock()
 
-		if childURL[:4] != "http" {
-			collector.Mutex.Lock()
-			collector.ResourceMap[childURL] = false
-			collector.Mutex.Unlock()
-			childURL = url + childURL
+		if !childurl.IsAbs() {
+			RedirectedUrl, _ := url.Parse(redirectedUrl)
+
+			childRawUrl = convertToAbs(RedirectedUrl, childurl)
 		}
 
-		collector.Mutex.Lock()
-		if _, contains := collector.UrlMap[childURL]; contains {
-			collector.Mutex.Unlock()
+		if collector.Present(existingUrls, childRawUrl) {
 			continue
 		}
-		collector.Mutex.Unlock()
 
-		collector.Mutex.Lock()
-		collector.UrlMap[childURL] = false
-		collector.Mutex.Unlock()
+		collector.Add(existingUrls, childRawUrl, false)
 
-		urls = append(urls, childURL)
+		rawurls = append(rawurls, childRawUrl)
 	}
 
-	if len(urls) >= 0 {
-		log.Println(len(urls), "URLs found on the URL", url)
+	if len(rawurls) >= 0 {
+		log.Println(len(rawurls), "URLs found on the URL", redirectedUrl)
 	}
 
-	return urls
+	return rawurls
 }
 
 func readResponse(reader io.Reader) []byte {
