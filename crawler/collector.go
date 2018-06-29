@@ -1,6 +1,7 @@
 package crawler
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net/http"
@@ -15,23 +16,23 @@ type URLCollector struct {
 	*sync.Mutex
 }
 
-func (collector URLCollector) sync(f func()) {
+func (collector *URLCollector) sync(f func()) {
 	collector.Lock()
 	f()
 	collector.Unlock()
 }
 
-func (collector URLCollector) Visited(m map[string]bool, s string) (visited bool) {
+func (collector *URLCollector) Visited(m map[string]bool, s string) (visited bool) {
 	collector.sync(func() { visited = m[s] })
 	return
 }
 
-func (collector URLCollector) Present(m map[string]bool, s string) (present bool) {
+func (collector *URLCollector) Present(m map[string]bool, s string) (present bool) {
 	collector.sync(func() { _, present = m[s] })
 	return
 }
 
-func (collector URLCollector) Add(m map[string]bool, s string, visited bool) {
+func (collector *URLCollector) Add(m map[string]bool, s string, visited bool) {
 	collector.sync(func() { m[s] = visited })
 }
 
@@ -41,7 +42,7 @@ func convertToAbs(parentUrl *url.URL, childUrl *url.URL) string {
 	return parentUrl.String()
 }
 
-func (collector URLCollector) Collect(rawurl string) []string {
+func (collector *URLCollector) Collect(rawurl string) []string {
 	var rawurls []string
 
 	_, err := url.Parse(rawurl)
@@ -83,11 +84,9 @@ func (collector URLCollector) Collect(rawurl string) []string {
 	collector.Add(existingUrls, redirectedUrl, true)
 	collector.Add(existingUrls, rawurl, true)
 
-	defer res.Body.Close()
+	content := readContent(res.Body)
 
-	content := readResponse(res.Body)
-
-	urlGen := urlGenerator(string(content))
+	urlGen := urlGenerator(content)
 
 	for childRawUrl := urlGen(); childRawUrl != ""; childRawUrl = urlGen() {
 		if len(childRawUrl) < 5 {
@@ -122,15 +121,13 @@ func (collector URLCollector) Collect(rawurl string) []string {
 	return rawurls
 }
 
-func readResponse(reader io.Reader) []byte {
-	var content []byte
-	buffer := make([]byte, 1024)
+func readContent(readerCloser io.ReadCloser) string {
+	var buf bytes.Buffer
 
-	for c, err := reader.Read(buffer); c > 0 || err == nil; c, err = reader.Read(buffer) {
-		content = append(content, buffer...)
-	}
+	io.Copy(&buf, readerCloser)
+	readerCloser.Close()
 
-	return content
+	return buf.String()
 }
 
 func urlGenerator(allContent string) func() string {
