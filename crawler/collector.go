@@ -53,6 +53,8 @@ func (collector URLCollector) Collect(rawurl string) []string {
 	existingUrls := collector.UrlMap
 
 	if collector.Visited(existingUrls, rawurl) {
+		log.Println(rawurl, ": is visited.")
+
 		return rawurls
 	}
 
@@ -64,13 +66,17 @@ func (collector URLCollector) Collect(rawurl string) []string {
 		return rawurls
 	}
 
-	if 200 > res.StatusCode || res.StatusCode >= 300 {
+	if 200 > res.StatusCode || res.StatusCode >= 400 {
+		log.Println("Bad response", res.StatusCode, "on:", rawurl)
+
 		return rawurls
 	}
 
 	redirectedUrl := res.Request.URL.String()
 
 	if collector.Visited(existingUrls, redirectedUrl) {
+		log.Println(redirectedUrl, ": is visited.")
+
 		return rawurls
 	}
 

@@ -27,13 +27,9 @@ func NewExecutor(maxWorkers int, signals chan int) *Executor {
 		signals:    signals,
 	}
 
-	e.init()
+	go e.launch()
 
 	return &e
-}
-
-func (e *Executor) init() {
-	go e.launch()
 }
 
 func (e *Executor) launch() int {
@@ -46,12 +42,16 @@ func (e *Executor) launch() int {
 				return 0
 			}
 
-		case j := <-e.Jobs:
-			e.handleJobs(j, reports)
-
 		case r := <-reports:
 			if r.Status() == 0 {
 				e.AddReport(r)
+			}
+
+		default:
+			if e.ActiveWorkers < e.maxWorkers && len(e.Jobs) > 0 {
+				j := <-e.Jobs
+				e.ActiveWorkers++
+				go e.launchWorker(j, reports)
 			}
 		}
 	}
@@ -72,16 +72,6 @@ func (e *Executor) handleSignals(signal int) int {
 	}
 
 	return 1
-}
-
-func (e *Executor) handleJobs(job Job, reports chan<- Report) {
-	if e.ActiveWorkers < e.maxWorkers {
-		e.ActiveWorkers++
-
-		go e.launchWorker(job, reports)
-	} else {
-		e.AddJob(job)
-	}
 }
 
 func (e *Executor) launchWorker(job Job, reports chan<- Report) {
