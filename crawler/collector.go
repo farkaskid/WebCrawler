@@ -1,118 +1,154 @@
 package crawler
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"sync"
 )
 
 type URLCollector struct {
-	ResourceMap map[string]bool
-	UrlMap      map[string]bool
-	Mutex       *sync.Mutex
+	UrlMap map[string]bool
+	*sync.Mutex
 }
 
-func (collector URLCollector) Collect(url string) []string {
-	var urls []string
+func (collector *URLCollector) sync(f func()) {
+	collector.Lock()
+	f()
+	collector.Unlock()
+}
 
-	collector.Mutex.Lock()
-	if collector.UrlMap[url] {
-		collector.Mutex.Unlock()
-		return urls
-	}
-	collector.Mutex.Unlock()
+func (collector *URLCollector) Visited(m map[string]bool, s string) (visited bool) {
+	collector.sync(func() { visited = m[s] })
+	return
+}
 
-	res, err := http.Get(url)
+func (collector *URLCollector) Present(m map[string]bool, s string) (present bool) {
+	collector.sync(func() { _, present = m[s] })
+	return
+}
+
+func (collector *URLCollector) Add(m map[string]bool, s string, visited bool) {
+	collector.sync(func() { m[s] = visited })
+}
+
+func convertToAbs(parentUrl *url.URL, childUrl *url.URL) string {
+	parentUrl.Path = path.Join(parentUrl.Path, childUrl.Path)
+
+	return parentUrl.String()
+}
+
+func (collector *URLCollector) Collect(rawurl string) []string {
+	var rawurls []string
+
+	_, err := url.Parse(rawurl)
 
 	if err != nil {
-		log.Println("Failed to crawl URL", url)
-
-		return urls
+		return rawurls
 	}
 
-	defer res.Body.Close()
+	existingUrls := collector.UrlMap
 
-	content := readResponse(res.Body)
+	if collector.Visited(existingUrls, rawurl) {
+		log.Println(rawurl, ": is visited.")
 
-	collector.Mutex.Lock()
-	collector.UrlMap[url] = true
-	collector.Mutex.Unlock()
+		return rawurls
+	}
 
-	urlFinder := urlFinderGenerator(string(content))
+	res, err := http.Get(rawurl)
 
-	for childURL := urlFinder(); childURL != ""; childURL = urlFinder() {
-		if len(childURL) < 5 {
+	if err != nil {
+		log.Println("Failed to crawl URL", rawurl)
+
+		return rawurls
+	}
+
+	if 200 > res.StatusCode || res.StatusCode >= 400 {
+		log.Println("Bad response", res.StatusCode, "on:", rawurl)
+
+		return rawurls
+	}
+
+	redirectedUrl := res.Request.URL.String()
+
+	if collector.Visited(existingUrls, redirectedUrl) {
+		log.Println(redirectedUrl, ": is visited.")
+
+		return rawurls
+	}
+
+	collector.Add(existingUrls, redirectedUrl, true)
+	collector.Add(existingUrls, rawurl, true)
+
+	content := readContent(res.Body)
+
+	urlGen := urlGenerator(content)
+
+	for childRawUrl := urlGen(); childRawUrl != ""; childRawUrl = urlGen() {
+		if len(childRawUrl) < 5 {
 			continue
 		}
 
-		collector.Mutex.Lock()
-		if _, contains := collector.ResourceMap[childURL]; contains {
-			collector.Mutex.Unlock()
+		childurl, err := url.Parse(childRawUrl)
+
+		if err != nil {
 			continue
 		}
-		collector.Mutex.Unlock()
 
-		if childURL[:4] != "http" {
-			collector.Mutex.Lock()
-			collector.ResourceMap[childURL] = false
-			collector.Mutex.Unlock()
-			childURL = url + childURL
+		if !childurl.IsAbs() {
+			RedirectedUrl, _ := url.Parse(redirectedUrl)
+
+			childRawUrl = convertToAbs(RedirectedUrl, childurl)
 		}
 
-		collector.Mutex.Lock()
-		if _, contains := collector.UrlMap[childURL]; contains {
-			collector.Mutex.Unlock()
+		if collector.Present(existingUrls, childRawUrl) {
 			continue
 		}
-		collector.Mutex.Unlock()
 
-		collector.Mutex.Lock()
-		collector.UrlMap[childURL] = false
-		collector.Mutex.Unlock()
+		collector.Add(existingUrls, childRawUrl, false)
 
-		urls = append(urls, childURL)
+		rawurls = append(rawurls, childRawUrl)
 	}
 
-	if len(urls) >= 0 {
-		log.Println(len(urls), "URLs found on the URL", url)
+	if len(rawurls) >= 0 {
+		log.Println(len(rawurls), "URLs found on the URL", redirectedUrl)
 	}
 
-	return urls
+	return rawurls
 }
 
-func readResponse(reader io.Reader) []byte {
-	var content []byte
-	buffer := make([]byte, 1024)
+func readContent(readerCloser io.ReadCloser) string {
+	var buf bytes.Buffer
 
-	for c, err := reader.Read(buffer); c > 0 || err == nil; c, err = reader.Read(buffer) {
-		content = append(content, buffer...)
-	}
+	io.Copy(&buf, readerCloser)
+	readerCloser.Close()
 
-	return content
+	return buf.String()
 }
 
-func urlFinderGenerator(content string) func() string {
-	modifiedContent := content
+func urlGenerator(allContent string) func() string {
+	content := allContent
 
 	return func() string {
-		start := strings.Index(modifiedContent, "href=\"")
+		start := strings.Index(content, "href=\"")
 
 		if start == -1 {
 			return ""
 		}
 
-		modifiedContent = modifiedContent[start+6:]
-		end := strings.Index(modifiedContent, "\"")
+		content = content[start+6:]
+		end := strings.Index(content, "\"")
 
 		if end == -1 {
 			return ""
 		}
 
-		url := modifiedContent[:end]
-
-		modifiedContent = modifiedContent[end:]
+		url := content[:end]
+		content = content[end:]
 
 		return url
 	}

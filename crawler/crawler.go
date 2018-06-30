@@ -1,44 +1,63 @@
 package crawler
 
-type Collector interface {
-	Collect(resource string) []string
-}
-
-type Processor interface {
-	Process(data []string)
-}
+import (
+	"WebCrawler/executor"
+)
 
 type Crawler struct {
-	Url  string
-	Done chan<- bool
-
-	data []string
+	Url string
 
 	Collector
 	Processor
-}
-
-func (crawler *Crawler) Start() {
-	crawler.data = crawler.Collect(crawler.Url)
-
-	// crawler.Process(crawler.data)
-
-	for _, datum := range crawler.data {
-		crawler.spawnChild(datum)
-	}
-
-	crawler.Done <- true
+	Filter
+	Executor *executor.Executor
 }
 
 func (crawler *Crawler) spawnChild(resource string) {
 	child := Crawler{
 		Url:       resource,
-		Done:      crawler.Done,
 		Processor: crawler.Processor,
-
+		Filter:    crawler.Filter,
 		Collector: crawler.Collector,
+		Executor:  crawler.Executor,
 	}
 
-	child.Done <- false
-	go child.Start()
+	crawler.Executor.AddJob(CrawlerJob{child})
+}
+
+type CrawlerJob struct {
+	Crawler Crawler
+}
+
+func (job CrawlerJob) Execute() executor.Report {
+	c := job.Crawler
+
+	urls := c.Collect(c.Url)
+
+	// crawler.Process(crawler.data)
+
+	count := 0
+	for _, url := range c.Filter.Filter(urls) {
+		c.spawnChild(url)
+		count++
+	}
+
+	return CrawlerReport{c.Url, count}
+}
+
+func (job CrawlerJob) String() string {
+	return "Crawl url: " + job.Crawler.Url
+}
+
+type CrawlerReport struct {
+	Url      string
+	UrlCount int
+}
+
+func (report CrawlerReport) Status() int {
+	return 0
+}
+
+func (report CrawlerReport) String() string {
+	return "Crawl report for url: " + report.Url
 }
