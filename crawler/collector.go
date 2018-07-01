@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"hash/fnv"
 	"io"
 	"log"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 )
 
 type URLCollector struct {
-	UrlMap map[string]bool
+	UrlMap map[uint64]bool
 	*sync.Mutex
 }
 
@@ -22,18 +23,18 @@ func (collector *URLCollector) sync(f func()) {
 	collector.Unlock()
 }
 
-func (collector *URLCollector) Visited(m map[string]bool, s string) (visited bool) {
-	collector.sync(func() { visited = m[s] })
+func (collector *URLCollector) Visited(m map[uint64]bool, s string) (visited bool) {
+	collector.sync(func() { visited = m[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) Present(m map[string]bool, s string) (present bool) {
-	collector.sync(func() { _, present = m[s] })
+func (collector *URLCollector) Present(m map[uint64]bool, s string) (present bool) {
+	collector.sync(func() { _, present = m[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) Add(m map[string]bool, s string, visited bool) {
-	collector.sync(func() { m[s] = visited })
+func (collector *URLCollector) Add(m map[uint64]bool, s string, visited bool) {
+	collector.sync(func() { m[hash(s)] = visited })
 }
 
 func convertToAbs(parentUrl *url.URL, childUrl *url.URL) string {
@@ -119,6 +120,18 @@ func (collector *URLCollector) Collect(rawurl string) []string {
 	}
 
 	return rawurls
+}
+
+func hash(s string) uint64 {
+	h := fnv.New64a()
+	_, err := h.Write([]byte(s))
+
+	if err != nil {
+		log.Println("Failed to hash value:", s)
+		return 0
+	}
+
+	return h.Sum64()
 }
 
 func readContent(readerCloser io.ReadCloser) string {
