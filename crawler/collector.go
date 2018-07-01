@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"bytes"
+	"errors"
 	"hash/fnv"
 	"io"
 	"log"
@@ -89,7 +90,7 @@ func (collector *URLCollector) Collect(rawurl string) []string {
 
 	urlGen := urlGenerator(content)
 
-	for childRawUrl := urlGen(); childRawUrl != ""; childRawUrl = urlGen() {
+	for childRawUrl, err := urlGen(); err == nil; childRawUrl, err = urlGen() {
 		if len(childRawUrl) < 5 {
 			continue
 		}
@@ -143,26 +144,26 @@ func readContent(readerCloser io.ReadCloser) string {
 	return buf.String()
 }
 
-func urlGenerator(allContent string) func() string {
+func urlGenerator(allContent string) func() (string, error) {
 	content := allContent
 
-	return func() string {
+	return func() (string, error) {
 		start := strings.Index(content, "href=\"")
 
 		if start == -1 {
-			return ""
+			return "", errors.New("content exhausted.")
 		}
 
 		content = content[start+6:]
 		end := strings.Index(content, "\"")
 
 		if end == -1 {
-			return ""
+			return "", nil
 		}
 
 		url := content[:end]
 		content = content[end:]
 
-		return url
+		return url, nil
 	}
 }
