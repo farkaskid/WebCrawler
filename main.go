@@ -58,7 +58,7 @@ func main() {
 
 func newCrawler(url string, filter crawler.Filter, executor *executor.Executor) crawler.Crawler {
 	processor := &crawler.LogProcessor{}
-	collector := &crawler.URLCollector{make(map[string]bool), &sync.Mutex{}}
+	collector := &crawler.URLCollector{make(map[uint64]bool), &sync.Mutex{}}
 
 	return crawler.Crawler{
 		Processor: processor,
