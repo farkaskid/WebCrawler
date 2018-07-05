@@ -8,13 +8,14 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 	"sync"
 )
 
+// URLCollector is an implementation of the collector interface that collects URLs for the pages
+// that the crawler visits.
 type URLCollector struct {
-	UrlMap map[uint64]bool
+	URLMap map[uint64]bool
 	*sync.Mutex
 }
 
@@ -24,26 +25,21 @@ func (collector *URLCollector) sync(f func()) {
 	collector.Unlock()
 }
 
-func (collector *URLCollector) Visited(m map[uint64]bool, s string) (visited bool) {
+func (collector *URLCollector) visited(m map[uint64]bool, s string) (visited bool) {
 	collector.sync(func() { visited = m[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) Present(m map[uint64]bool, s string) (present bool) {
+func (collector *URLCollector) present(m map[uint64]bool, s string) (present bool) {
 	collector.sync(func() { _, present = m[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) Add(m map[uint64]bool, s string, visited bool) {
+func (collector *URLCollector) add(m map[uint64]bool, s string, visited bool) {
 	collector.sync(func() { m[hash(s)] = visited })
 }
 
-func convertToAbs(parentUrl *url.URL, childUrl *url.URL) string {
-	parentUrl.Path = path.Join(parentUrl.Path, childUrl.Path)
-
-	return parentUrl.String()
-}
-
+// Collect method collects all the URLs that are available in the form on href="" markup.
 func (collector *URLCollector) Collect(rawurl string) []string {
 	var rawurls []string
 
@@ -53,9 +49,9 @@ func (collector *URLCollector) Collect(rawurl string) []string {
 		return rawurls
 	}
 
-	existingUrls := collector.UrlMap
+	existingURLs := collector.URLMap
 
-	if collector.Visited(existingUrls, rawurl) {
+	if collector.visited(existingURLs, rawurl) {
 		log.Println(rawurl, ": is visited.")
 
 		return rawurls
@@ -75,54 +71,55 @@ func (collector *URLCollector) Collect(rawurl string) []string {
 		return rawurls
 	}
 
-	redirectedUrl := res.Request.URL.String()
+	redirectedURL := res.Request.URL.String()
 
-	if collector.Visited(existingUrls, redirectedUrl) {
-		log.Println(redirectedUrl, ": is visited.")
+	if collector.visited(existingURLs, redirectedURL) {
+		log.Println(redirectedURL, ": is visited.")
 
 		return rawurls
 	}
 
-	collector.Add(existingUrls, redirectedUrl, true)
-	collector.Add(existingUrls, rawurl, true)
+	collector.add(existingURLs, redirectedURL, true)
+	collector.add(existingURLs, rawurl, true)
 
 	content := readContent(res.Body)
 
 	urlGen := urlGenerator(content)
 
-	for childRawUrl, err := urlGen(); err == nil; childRawUrl, err = urlGen() {
-		if len(childRawUrl) < 5 {
+	for childRawURL, err := urlGen(); err == nil; childRawURL, err = urlGen() {
+		if len(childRawURL) < 5 {
 			continue
 		}
 
-		childurl, err := url.Parse(childRawUrl)
+		childURL, err := url.Parse(childRawURL)
 
 		if err != nil {
 			continue
 		}
 
-		if !childurl.IsAbs() {
-			RedirectedUrl, _ := url.Parse(redirectedUrl)
+		if !childURL.IsAbs() {
+			RedirectedURL, _ := url.Parse(redirectedURL)
 
-			childRawUrl = convertToAbs(RedirectedUrl, childurl)
+			childRawURL = RedirectedURL.ResolveReference(childURL).String()
 		}
 
-		if collector.Present(existingUrls, childRawUrl) {
+		if collector.present(existingURLs, childRawURL) {
 			continue
 		}
 
-		collector.Add(existingUrls, childRawUrl, false)
+		collector.add(existingURLs, childRawURL, false)
 
-		rawurls = append(rawurls, childRawUrl)
+		rawurls = append(rawurls, childRawURL)
 	}
 
 	if len(rawurls) >= 0 {
-		log.Println(len(rawurls), "URLs found on the URL", redirectedUrl)
+		log.Println(len(rawurls), "URLs found on the URL", redirectedURL)
 	}
 
 	return rawurls
 }
 
+// This function is a utility used to hash the given string using the FNV-1a hashing algorithm.
 func hash(s string) uint64 {
 	h := fnv.New64a()
 	_, err := h.Write([]byte(s))
@@ -151,7 +148,7 @@ func urlGenerator(allContent string) func() (string, error) {
 		start := strings.Index(content, "href=\"")
 
 		if start == -1 {
-			return "", errors.New("content exhausted.")
+			return "", errors.New("content exhausted")
 		}
 
 		content = content[start+6:]
