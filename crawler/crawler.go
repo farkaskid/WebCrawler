@@ -5,7 +5,7 @@ import (
 )
 
 type Crawler struct {
-	Url string
+	URL string
 
 	Collector
 	Processor
@@ -15,7 +15,7 @@ type Crawler struct {
 
 func (crawler *Crawler) spawnChild(resource string) {
 	child := Crawler{
-		Url:       resource,
+		URL:       resource,
 		Processor: crawler.Processor,
 		Filter:    crawler.Filter,
 		Collector: crawler.Collector,
@@ -32,32 +32,17 @@ type CrawlerJob struct {
 func (job CrawlerJob) Execute() executor.Report {
 	c := job.Crawler
 
-	urls := c.Collect(c.Url)
+	res, URLs, err := c.Collect(c.URL)
+	report, count := c.Process(c.URL, res, URLs, err), 0
 
-	// crawler.Process(crawler.data)
-
-	count := 0
-	for _, url := range c.Filter.Filter(urls) {
+	for _, url := range c.Filter.Filter(URLs) {
 		c.spawnChild(url)
 		count++
 	}
 
-	return CrawlerReport{c.Url, count}
+	return report
 }
 
 func (job CrawlerJob) String() string {
-	return "Crawl url: " + job.Crawler.Url
-}
-
-type CrawlerReport struct {
-	Url      string
-	UrlCount int
-}
-
-func (report CrawlerReport) Status() int {
-	return 0
-}
-
-func (report CrawlerReport) String() string {
-	return "Crawl report for url: " + report.Url
+	return "Crawl url: " + job.Crawler.URL
 }

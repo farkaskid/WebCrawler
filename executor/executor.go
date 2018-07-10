@@ -2,6 +2,7 @@ package executor
 
 import (
 	"log"
+	"sync/atomic"
 )
 
 // The Executor struct is the main executor for jobs.
@@ -12,8 +13,8 @@ import (
 // 'signals' is channel that can be used to control the executor. Right now, only the termination
 // signal is supported which is essentially is sending '1' on this channel by the client.
 type Executor struct {
-	maxWorkers    int
-	ActiveWorkers int
+	maxWorkers    int64
+	ActiveWorkers int64
 
 	Jobs    chan Job
 	Reports chan Report
@@ -31,7 +32,7 @@ func NewExecutor(maxWorkers int, signals chan int) *Executor {
 	}
 
 	e := Executor{
-		maxWorkers: maxWorkers,
+		maxWorkers: int64(maxWorkers),
 		Jobs:       make(chan Job, chanSize),
 		Reports:    make(chan Report, chanSize),
 		signals:    signals,
@@ -55,14 +56,12 @@ func (e *Executor) launch() int {
 			}
 
 		case r := <-reports:
-			if r.Status() == 0 {
-				e.addReport(r)
-			}
+			e.addReport(r)
 
 		default:
 			if e.ActiveWorkers < e.maxWorkers && len(e.Jobs) > 0 {
 				j := <-e.Jobs
-				e.ActiveWorkers++
+				atomic.AddInt64(&e.ActiveWorkers, 1)
 				go e.launchWorker(j, reports)
 			}
 		}
@@ -76,7 +75,7 @@ func (e *Executor) handleSignals(signal int) int {
 	if signal == 1 {
 		log.Println("Received termination request...")
 
-		if e.inactive() {
+		if e.Inactive() {
 			log.Println("No active workers, exiting...")
 			e.signals <- 0
 			return 0
@@ -102,7 +101,7 @@ func (e *Executor) launchWorker(job Job, reports chan<- Report) {
 		log.Println("Executor's report channel is full...")
 	}
 
-	e.ActiveWorkers--
+	atomic.AddInt64(&e.ActiveWorkers, -1)
 }
 
 // AddJob is used to submit a new job to the Executor is a non-blocking way. The Client can submit
@@ -134,8 +133,8 @@ func (e *Executor) addReport(report Report) bool {
 	return true
 }
 
-// inactive checks if the Executor is idle. This happens when there are no pending jobs, active
+// Inactive checks if the Executor is idle. This happens when there are no pending jobs, active
 // workers and reports to publish. It is called when a the Executor receives a termination request.
-func (e *Executor) inactive() bool {
+func (e *Executor) Inactive() bool {
 	return e.ActiveWorkers == 0 && len(e.Jobs) == 0 && len(e.Reports) == 0
 }

@@ -40,43 +40,35 @@ func (collector *URLCollector) add(m map[uint64]bool, s string, visited bool) {
 }
 
 // Collect method collects all the URLs that are available in the form on href="" markup.
-func (collector *URLCollector) Collect(rawurl string) []string {
+func (collector *URLCollector) Collect(rawurl string) (*http.Response, []string, error) {
 	var rawurls []string
 
 	_, err := url.Parse(rawurl)
 
 	if err != nil {
-		return rawurls
+		return nil, rawurls, err
 	}
 
 	existingURLs := collector.URLMap
 
 	if collector.visited(existingURLs, rawurl) {
-		log.Println(rawurl, ": is visited.")
-
-		return rawurls
+		return nil, rawurls, errors.New("URL is already crawled")
 	}
 
 	res, err := http.Get(rawurl)
 
 	if err != nil {
-		log.Println("Failed to crawl URL", rawurl)
-
-		return rawurls
+		return res, rawurls, err
 	}
 
 	if 200 > res.StatusCode || res.StatusCode >= 400 {
-		log.Println("Bad response", res.StatusCode, "on:", rawurl)
-
-		return rawurls
+		return res, rawurls, errors.New("URL responded with status code " + res.Status)
 	}
 
 	redirectedURL := res.Request.URL.String()
 
 	if collector.visited(existingURLs, redirectedURL) {
-		log.Println(redirectedURL, ": is visited.")
-
-		return rawurls
+		return res, rawurls, errors.New("URL is already crawled")
 	}
 
 	collector.add(existingURLs, redirectedURL, true)
@@ -112,11 +104,7 @@ func (collector *URLCollector) Collect(rawurl string) []string {
 		rawurls = append(rawurls, childRawURL)
 	}
 
-	if len(rawurls) >= 0 {
-		log.Println(len(rawurls), "URLs found on the URL", redirectedURL)
-	}
-
-	return rawurls
+	return res, rawurls, nil
 }
 
 // This function is a utility used to hash the given string using the FNV-1a hashing algorithm.
