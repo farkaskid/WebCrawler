@@ -5,12 +5,18 @@ import (
 	"net/http"
 )
 
+// Anchor represent an HTML anchor tag.
+type Anchor struct {
+	Href  string
+	Title string
+}
+
 type Collector interface {
-	Collect(resource string) (*http.Response, []string, error)
+	Collect(url string) (*http.Response, []Anchor, error)
 }
 
 type Processor interface {
-	Process(requestedURL string, response *http.Response, connectedURLs []string, err error) executor.Report
+	Process(url string, response *http.Response, connectedURLs []Anchor, err error) executor.Report
 }
 
 type Filter interface {

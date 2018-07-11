@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"regexp"
 	"sync"
 )
 
@@ -63,7 +64,9 @@ func newCrawler(executor *executor.Executor) crawler.Crawler {
 	}
 
 	processor := &crawler.DefaultProcessor{}
-	collector := &crawler.URLCollector{make(map[uint64]bool), &sync.Mutex{}}
+
+	regex, _ := regexp.Compile("<a[^>]*>([^<]+)</a>")
+	collector := &crawler.URLCollector{make(map[uint64]bool), regex, &sync.Mutex{}}
 
 	return crawler.Crawler{
 		Processor: processor,
