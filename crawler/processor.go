@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-// CrawlReport represents the results of the crawling task of a single URL.
-type CrawlReport struct {
+// Report represents the results of the crawling task of a single URL.
+type Report struct {
 	URL           string
 	HTTPStatus    int
 	Err           string
@@ -15,11 +15,11 @@ type CrawlReport struct {
 }
 
 // Status returns the HTTPStatus of the GET request on the URL of this report.
-func (report CrawlReport) Status() int {
+func (report Report) Status() int {
 	return report.HTTPStatus
 }
 
-func (report CrawlReport) String() string {
+func (report Report) String() string {
 	if report.HTTPStatus == 0 {
 		return "Failed to crawl URL: " + report.URL + ". Cause: " + report.Err
 	}
@@ -37,8 +37,8 @@ type DefaultProcessor struct{}
 func (processor DefaultProcessor) Process(requestedURL string, res *http.Response, connectedURLs []string,
 	err error) executor.Report {
 	if res == nil {
-		return CrawlReport{requestedURL, 0, err.Error(), make([]string, 0)}
+		return Report{requestedURL, 0, err.Error(), make([]string, 0)}
 	}
 
-	return CrawlReport{requestedURL, res.StatusCode, "", connectedURLs}
+	return Report{requestedURL, res.StatusCode, "", connectedURLs}
 }

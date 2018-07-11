@@ -5,18 +5,18 @@ import (
 	"sync/atomic"
 )
 
-// The Executor struct is the main executor for jobs.
+// The Executor struct is the main executor for tasks.
 // 'maxWorkers' represents the maximum number of simultaneous goroutines.
 // 'ActiveWorkers' tells the number of active goroutines spawned by the Executor at given time.
-// 'Jobs' is the channel on which the Executor receives the jobs.
-// 'Reports' is channel on which the Executor publishes the every jobs reports.
+// 'Tasks' is the channel on which the Executor receives the tasks.
+// 'Reports' is channel on which the Executor publishes the every tasks reports.
 // 'signals' is channel that can be used to control the executor. Right now, only the termination
 // signal is supported which is essentially is sending '1' on this channel by the client.
 type Executor struct {
 	maxWorkers    int64
 	ActiveWorkers int64
 
-	Jobs    chan Job
+	Tasks   chan Task
 	Reports chan Report
 	signals chan int
 }
@@ -31,38 +31,38 @@ func NewExecutor(maxWorkers int, signals chan int) *Executor {
 		chanSize = maxWorkers
 	}
 
-	e := Executor{
+	executor := Executor{
 		maxWorkers: int64(maxWorkers),
-		Jobs:       make(chan Job, chanSize),
+		Tasks:      make(chan Task, chanSize),
 		Reports:    make(chan Report, chanSize),
 		signals:    signals,
 	}
 
-	go e.launch()
+	go executor.launch()
 
-	return &e
+	return &executor
 }
 
 // launch starts the main loop for polling on the all the relevant channels and handling differents
 // messages.
-func (e *Executor) launch() int {
-	reports := make(chan Report, e.maxWorkers)
+func (executor *Executor) launch() int {
+	reports := make(chan Report, executor.maxWorkers)
 
 	for {
 		select {
-		case signal := <-e.signals:
-			if e.handleSignals(signal) == 0 {
+		case signal := <-executor.signals:
+			if executor.handleSignals(signal) == 0 {
 				return 0
 			}
 
 		case r := <-reports:
-			e.addReport(r)
+			executor.addReport(r)
 
 		default:
-			if e.ActiveWorkers < e.maxWorkers && len(e.Jobs) > 0 {
-				j := <-e.Jobs
-				atomic.AddInt64(&e.ActiveWorkers, 1)
-				go e.launchWorker(j, reports)
+			if executor.ActiveWorkers < executor.maxWorkers && len(executor.Tasks) > 0 {
+				task := <-executor.Tasks
+				atomic.AddInt64(&executor.ActiveWorkers, 1)
+				go executor.launchWorker(task, reports)
 			}
 		}
 	}
@@ -71,29 +71,29 @@ func (e *Executor) launch() int {
 // handleSignals is called whenever anything is received on the 'signals' channel.
 // It performs the relevant task according to the received signal(request) and then responds either
 // with 0 or 1 indicating whether the request was respected(0) or rejected(1).
-func (e *Executor) handleSignals(signal int) int {
+func (executor *Executor) handleSignals(signal int) int {
 	if signal == 1 {
 		log.Println("Received termination request...")
 
-		if e.Inactive() {
+		if executor.Inactive() {
 			log.Println("No active workers, exiting...")
-			e.signals <- 0
+			executor.signals <- 0
 			return 0
 		}
 
-		e.signals <- 1
-		log.Println("Some jobs are still active...")
+		executor.signals <- 1
+		log.Println("Some tasks are still active...")
 	}
 
 	return 1
 }
 
-// launchWorker is called whenever a new Job is received and Executor can spawn more workers to spawn
+// launchWorker is called whenever a new Task is received and Executor can spawn more workers to spawn
 // a new Worker.
-// Each worker is launched on a new goroutine. It processes the given job and publishes the report on
+// Each worker is launched on a new goroutine. It performs the given task and publishes the report on
 // the Executor's internal reports channel.
-func (e *Executor) launchWorker(job Job, reports chan<- Report) {
-	report := job.Execute()
+func (executor *Executor) launchWorker(task Task, reports chan<- Report) {
+	report := task.Execute()
 
 	if len(reports) < cap(reports) {
 		reports <- report
@@ -101,21 +101,21 @@ func (e *Executor) launchWorker(job Job, reports chan<- Report) {
 		log.Println("Executor's report channel is full...")
 	}
 
-	atomic.AddInt64(&e.ActiveWorkers, -1)
+	atomic.AddInt64(&executor.ActiveWorkers, -1)
 }
 
-// AddJob is used to submit a new job to the Executor is a non-blocking way. The Client can submit
-// a new job using the Executor's Jobs channel directly but that will block if the Jobs channel is
+// AddTask is used to submit a new task to the Executor is a non-blocking way. The Client can submit
+// a new task using the Executor's tasks channel directly but that will block if the tasks channel is
 // full.
-// It should be considered that this method doesn't add the given job if the Jobs channel is full
+// It should be considered that this method doesn't add the given task if the tasks channel is full
 // and it is up to client to try again later.
-func (e *Executor) AddJob(job Job) bool {
-	if len(e.Jobs) == cap(e.Jobs) {
+func (executor *Executor) AddTask(task Task) bool {
+	if len(executor.Tasks) == cap(executor.Tasks) {
 
 		return false
 	}
 
-	e.Jobs <- job
+	executor.Tasks <- task
 	return true
 }
 
@@ -123,18 +123,18 @@ func (e *Executor) AddJob(job Job) bool {
 // reading the reports channel or is slower that the Executor publishing the reports, the Executor's
 // reports channel is going to get full. In that case this method will not block and that report will
 // not be added.
-func (e *Executor) addReport(report Report) bool {
-	if len(e.Reports) == cap(e.Reports) {
+func (executor *Executor) addReport(report Report) bool {
+	if len(executor.Reports) == cap(executor.Reports) {
 
 		return false
 	}
 
-	e.Reports <- report
+	executor.Reports <- report
 	return true
 }
 
-// Inactive checks if the Executor is idle. This happens when there are no pending jobs, active
-// workers and reports to publish. It is called when a the Executor receives a termination request.
-func (e *Executor) Inactive() bool {
-	return e.ActiveWorkers == 0 && len(e.Jobs) == 0 && len(e.Reports) == 0
+// Inactive checks if the Executor is idle. This happens when there are no pending tasks, active
+// workers and reports to publish.
+func (executor *Executor) Inactive() bool {
+	return executor.ActiveWorkers == 0 && len(executor.Tasks) == 0 && len(executor.Reports) == 0
 }

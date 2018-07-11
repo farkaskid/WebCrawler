@@ -7,9 +7,9 @@ type Report interface {
 	String() string
 }
 
-// Job interface defines a job for the Executor. 'Execute' method is used to start the job which
-// must return a Report. String() gives a small description about the Job.
-type Job interface {
+// Task interface defines a job for the Executor. 'Execute' method is used to start the job which
+// must return a Report. String() gives a small description about the Task.
+type Task interface {
 	Execute() Report
 	String() string
 }

@@ -41,7 +41,7 @@ func init() {
 
 	os.Mkdir("reports", os.ModePerm)
 
-	gob.Register(crawler.CrawlReport{})
+	gob.Register(crawler.Report{})
 }
 
 func check(err error) {
@@ -74,9 +74,9 @@ func newCrawler(executor *executor.Executor) crawler.Crawler {
 	}
 }
 
-func handleReport(r executor.Report) {
-	log.Println(r)
-	reportsBuf = append(reportsBuf, r)
+func handleReport(report executor.Report) {
+	log.Println(report)
+	reportsBuf = append(reportsBuf, report)
 
 	if len(reportsBuf) == reportSize {
 		writeReports()
@@ -91,11 +91,11 @@ func writeReports() {
 	var extension string
 
 	if isJSON {
-		e := json.NewEncoder(&buf)
-		err, extension = e.Encode(reportsBuf), "json"
+		encoder := json.NewEncoder(&buf)
+		err, extension = encoder.Encode(reportsBuf), "json"
 	} else {
-		e := gob.NewEncoder(&buf)
-		err, extension = e.Encode(reportsBuf), "gob"
+		encoder := gob.NewEncoder(&buf)
+		err, extension = encoder.Encode(reportsBuf), "gob"
 	}
 
 	check(err)
@@ -122,7 +122,7 @@ func main() {
 
 	c := newCrawler(e)
 
-	e.AddJob(crawler.CrawlerJob{c})
+	e.AddTask(crawler.Task{c})
 
 	for {
 		select {
