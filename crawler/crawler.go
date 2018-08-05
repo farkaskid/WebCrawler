@@ -32,10 +32,16 @@ type Task struct {
 func (task Task) Execute() executor.Report {
 	crawler := task.Crawler
 
-	response, URLs, err := crawler.Collect(crawler.URL)
-	report, count := crawler.Process(crawler.URL, response, URLs, err), 0
+	response, anchors, err := crawler.Collect(crawler.URL)
+	report, count := crawler.Process(crawler.URL, response, anchors, err), 0
 
-	for _, url := range crawler.Filter.Filter(URLs) {
+	var hrefs []string
+
+	for _, anchor := range anchors {
+		hrefs = append(hrefs, anchor.Href)
+	}
+
+	for _, url := range crawler.Filter.Filter(hrefs) {
 		crawler.spawnChild(url)
 		count++
 	}

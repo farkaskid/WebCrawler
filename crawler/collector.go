@@ -8,14 +8,16 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 )
 
-// URLCollector is an implementation of the collector interface that collects URLs for the pages
+// URLCollector is an implementation of the collector interface that collects Anchors for the pages
 // that the crawler visits.
 type URLCollector struct {
-	URLMap map[uint64]bool
+	URLMap      map[uint64]bool
+	AnchorRegex *regexp.Regexp
 	*sync.Mutex
 }
 
@@ -25,86 +27,78 @@ func (collector *URLCollector) sync(f func()) {
 	collector.Unlock()
 }
 
-func (collector *URLCollector) visited(m map[uint64]bool, s string) (visited bool) {
-	collector.sync(func() { visited = m[hash(s)] })
+func (collector *URLCollector) visited(s string) (visited bool) {
+	collector.sync(func() { visited = collector.URLMap[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) present(m map[uint64]bool, s string) (present bool) {
-	collector.sync(func() { _, present = m[hash(s)] })
+func (collector *URLCollector) present(s string) (present bool) {
+	collector.sync(func() { _, present = collector.URLMap[hash(s)] })
 	return
 }
 
-func (collector *URLCollector) add(m map[uint64]bool, s string, visited bool) {
-	collector.sync(func() { m[hash(s)] = visited })
+func (collector *URLCollector) add(s string, visited bool) {
+	collector.sync(func() { collector.URLMap[hash(s)] = visited })
 }
 
 // Collect method collects all the URLs that are available in the form on href="" markup.
-func (collector *URLCollector) Collect(rawurl string) (*http.Response, []string, error) {
-	var rawurls []string
+func (collector *URLCollector) Collect(rawurl string) (*http.Response, []Anchor, error) {
+	var anchors []Anchor
 
 	_, err := url.Parse(rawurl)
 
 	if err != nil {
-		return nil, rawurls, err
+		return nil, anchors, err
 	}
 
-	existingURLs := collector.URLMap
-
-	if collector.visited(existingURLs, rawurl) {
-		return nil, rawurls, errors.New("URL is already crawled")
+	if collector.visited(rawurl) {
+		return nil, anchors, errors.New("URL is already crawled")
 	}
 
 	res, err := http.Get(rawurl)
 
 	if err != nil {
-		return res, rawurls, err
+		return res, anchors, err
 	}
 
 	if 200 > res.StatusCode || res.StatusCode >= 400 {
-		return res, rawurls, errors.New("URL responded with status code " + res.Status)
+		return res, anchors, errors.New("URL responded with status code " + res.Status)
 	}
 
-	redirectedURL := res.Request.URL.String()
+	pageurl := res.Request.URL.String()
 
-	if collector.visited(existingURLs, redirectedURL) {
-		return res, rawurls, errors.New("URL is already crawled")
+	if collector.visited(pageurl) {
+		return res, anchors, errors.New("URL is already crawled")
 	}
 
-	collector.add(existingURLs, redirectedURL, true)
-	collector.add(existingURLs, rawurl, true)
+	collector.add(pageurl, true)
+	collector.add(rawurl, true)
 
-	content := readContent(res.Body)
-
-	urlGen := urlGenerator(content)
-
-	for childRawURL, err := urlGen(); err == nil; childRawURL, err = urlGen() {
-		if len(childRawURL) < 5 {
+	for _, anchor := range collector.findAnchors(readContent(res.Body)) {
+		if len(anchor.Href) < 5 {
 			continue
 		}
 
-		childURL, err := url.Parse(childRawURL)
+		URL, err := url.Parse(anchor.Href)
 
 		if err != nil {
 			continue
 		}
 
-		if !childURL.IsAbs() {
-			RedirectedURL, _ := url.Parse(redirectedURL)
-
-			childRawURL = RedirectedURL.ResolveReference(childURL).String()
+		if !URL.IsAbs() {
+			pageURL, _ := url.Parse(pageurl)
+			anchor.Href = pageURL.ResolveReference(URL).String()
 		}
 
-		if collector.present(existingURLs, childRawURL) {
+		if collector.present(anchor.Href) {
 			continue
 		}
 
-		collector.add(existingURLs, childRawURL, false)
-
-		rawurls = append(rawurls, childRawURL)
+		collector.add(anchor.Href, false)
+		anchors = append(anchors, anchor)
 	}
 
-	return res, rawurls, nil
+	return res, anchors, nil
 }
 
 // This function is a utility used to hash the given string using the FNV-1a hashing algorithm.
@@ -129,26 +123,43 @@ func readContent(readerCloser io.ReadCloser) string {
 	return buf.String()
 }
 
-func urlGenerator(allContent string) func() (string, error) {
-	content := allContent
+func (collector *URLCollector) findAnchors(text string) []Anchor {
+	var anchors []Anchor
 
-	return func() (string, error) {
-		start := strings.Index(content, "href=\"")
+	for _, match := range collector.AnchorRegex.FindAllString(text, -1) {
+		anchor, err := newAnchor(match)
 
-		if start == -1 {
-			return "", errors.New("content exhausted")
+		if err == nil {
+			anchors = append(anchors, anchor)
 		}
-
-		content = content[start+6:]
-		end := strings.Index(content, "\"")
-
-		if end == -1 {
-			return "", nil
-		}
-
-		url := content[:end]
-		content = content[end:]
-
-		return url, nil
 	}
+
+	return anchors
+}
+
+func newAnchor(text string) (Anchor, error) {
+	var anchor Anchor
+	var start, end int
+
+	start = strings.Index(text, `href="`)
+
+	if start == -1 {
+		return anchor, errors.New("Failed to extract href")
+	}
+
+	start += 6
+	end = start + strings.Index(text[start:], `"`)
+	anchor.Href = text[start:end]
+
+	start = strings.Index(text, ">")
+
+	if start == -1 {
+		return anchor, errors.New("Failed to extract title")
+	}
+
+	start++
+	end = start + strings.Index(text[start:], "<")
+	anchor.Title = text[start:end]
+
+	return anchor, nil
 }

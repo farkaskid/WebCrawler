@@ -111,7 +111,6 @@ func (executor *Executor) launchWorker(task Task, reports chan<- Report) {
 // and it is up to client to try again later.
 func (executor *Executor) AddTask(task Task) bool {
 	if len(executor.Tasks) == cap(executor.Tasks) {
-
 		return false
 	}
 
@@ -125,7 +124,6 @@ func (executor *Executor) AddTask(task Task) bool {
 // not be added.
 func (executor *Executor) addReport(report Report) bool {
 	if len(executor.Reports) == cap(executor.Reports) {
-
 		return false
 	}
 
