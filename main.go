@@ -55,6 +55,8 @@ func newCrawler(executor *executor.Executor) crawler.Crawler {
 	URL, err := url.Parse(rawurl)
 	check(err)
 
+	URL.Fragment = ""
+
 	var filter crawler.Filter
 
 	if bound {
@@ -72,13 +74,18 @@ func newCrawler(executor *executor.Executor) crawler.Crawler {
 		Processor: processor,
 		Collector: collector,
 		Filter:    filter,
-		URL:       URL.String(),
+		URL:       URL,
 		Executor:  executor,
 	}
 }
 
 func handleReport(report executor.Report) {
 	log.Println(report)
+
+	if report.Status() == 0 {
+		return
+	}
+
 	reportsBuf = append(reportsBuf, report)
 
 	if len(reportsBuf) == reportSize {
