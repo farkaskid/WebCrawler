@@ -5,7 +5,7 @@ import (
 )
 
 type Crawler struct {
-	Url string
+	URL string
 
 	Collector
 	Processor
@@ -13,51 +13,42 @@ type Crawler struct {
 	Executor *executor.Executor
 }
 
-func (crawler *Crawler) spawnChild(resource string) {
+func (crawler *Crawler) spawnChild(rawurl string) {
 	child := Crawler{
-		Url:       resource,
+		URL:       rawurl,
 		Processor: crawler.Processor,
 		Filter:    crawler.Filter,
 		Collector: crawler.Collector,
 		Executor:  crawler.Executor,
 	}
 
-	crawler.Executor.AddJob(CrawlerJob{child})
+	crawler.Executor.AddTask(Task{child})
 }
 
-type CrawlerJob struct {
+type Task struct {
 	Crawler Crawler
 }
 
-func (job CrawlerJob) Execute() executor.Report {
-	c := job.Crawler
+func (task Task) Execute() executor.Report {
+	crawler := task.Crawler
 
-	urls := c.Collect(c.Url)
+	response, anchors, err := crawler.Collect(crawler.URL)
+	report, count := crawler.Process(crawler.URL, response, anchors, err), 0
 
-	// crawler.Process(crawler.data)
+	var hrefs []string
 
-	count := 0
-	for _, url := range c.Filter.Filter(urls) {
-		c.spawnChild(url)
+	for _, anchor := range anchors {
+		hrefs = append(hrefs, anchor.Href)
+	}
+
+	for _, url := range crawler.Filter.Filter(hrefs) {
+		crawler.spawnChild(url)
 		count++
 	}
 
-	return CrawlerReport{c.Url, count}
+	return report
 }
 
-func (job CrawlerJob) String() string {
-	return "Crawl url: " + job.Crawler.Url
-}
-
-type CrawlerReport struct {
-	Url      string
-	UrlCount int
-}
-
-func (report CrawlerReport) Status() int {
-	return 0
-}
-
-func (report CrawlerReport) String() string {
-	return "Crawl report for url: " + report.Url
+func (task Task) String() string {
+	return "Crawl url: " + task.Crawler.URL
 }
