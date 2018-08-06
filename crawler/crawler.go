@@ -2,10 +2,12 @@ package crawler
 
 import (
 	"WebCrawler/executor"
+	"net/url"
+	"log"
 )
 
 type Crawler struct {
-	URL string
+	URL *url.URL
 
 	Collector
 	Processor
@@ -14,8 +16,16 @@ type Crawler struct {
 }
 
 func (crawler *Crawler) spawnChild(rawurl string) {
+	URL, err := url.Parse(rawurl)
+
+	if err != nil {
+		log.Println("Not a valid URL: ", URL.String())
+		return
+	}
+
+	URL.Fragment = ""
 	child := Crawler{
-		URL:       rawurl,
+		URL:       URL,
 		Processor: crawler.Processor,
 		Filter:    crawler.Filter,
 		Collector: crawler.Collector,
@@ -50,5 +60,5 @@ func (task Task) Execute() executor.Report {
 }
 
 func (task Task) String() string {
-	return "Crawl url: " + task.Crawler.URL
+	return "Crawl url: " + task.Crawler.URL.String()
 }

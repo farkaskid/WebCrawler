@@ -42,14 +42,9 @@ func (collector *URLCollector) add(s string, visited bool) {
 }
 
 // Collect method collects all the URLs that are available in the form on href="" markup.
-func (collector *URLCollector) Collect(rawurl string) (*http.Response, []Anchor, error) {
+func (collector *URLCollector) Collect(URL *url.URL) (*http.Response, []Anchor, error) {
 	var anchors []Anchor
-
-	_, err := url.Parse(rawurl)
-
-	if err != nil {
-		return nil, anchors, err
-	}
+	rawurl := URL.String()
 
 	if collector.visited(rawurl) {
 		return nil, anchors, errors.New("URL is already crawled")
